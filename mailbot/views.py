@@ -13,8 +13,8 @@ URL_AUTH = 'https://m.facebook.com/login.php'
 URL_NEXT = 'https://facebook.com/friends'
 URL_SEND_MSG = 'https://m.facebook.com/messages/send'
 
-EMAIL = ['obsidian.inf@gmail.com', 'sergio.ivanuzzo@gmail.com', 'xspectr@gmail.com']
-PASSWORD = ['facebookPASS235', 'facebookPASS234', 'facebookPASS237']
+EMAIL = ['obsidian.inf@gmail.com', 'your.mail@gmail.com', 'your.mail@gmail.com']
+PASSWORD = ['facebookPASS235', 'pass', 'pass']
 
 account_number = 2
 
