@@ -2,7 +2,7 @@
 
 from django.http import HttpResponse
 
-import urllib, pycurl, cStringIO, re, time
+import urllib, pycurl, cStringIO, re, time, lxml.html
 
 # for output cURL result
 data = cStringIO.StringIO()
@@ -10,13 +10,14 @@ data = cStringIO.StringIO()
 # OPTIONS
 
 URL_AUTH = 'https://m.facebook.com/login.php'
+URL_MAIN_PAGE = 'https://m.facebook.com/home.php'
 URL_NEXT = 'https://facebook.com/friends'
 URL_SEND_MSG = 'https://m.facebook.com/messages/send'
 
-EMAIL = ['obsidian.inf@gmail.com', 'your.mail@gmail.com', 'your.mail@gmail.com']
-PASSWORD = ['facebookPASS235', 'pass', 'pass']
+EMAIL = ['obsidian.inf@gmail.com', 'sergio.ivanuzzo@gmail.com', '@gmail.com']
+PASSWORD = ['facebookPASS235', 'facebookPASS234', '']
 
-account_number = 2
+account_number = 1
 
 AUTHDATA = {
         'email': EMAIL[account_number],
@@ -27,70 +28,39 @@ USERAGENT = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100101 Fir
 
 # param, which use in private message sending
 FB_DTSG = ['AQB5FnCU', 'AQAoKq39', 'AQBqnU8M']
-fb_dtsg = FB_DTSG[account_number]
+token = FB_DTSG[account_number]
 
 PROXY = ['190.96.64.234:8080', '78.129.233.67:3128', '213.141.236.133:8090']
 proxy = PROXY[2]
 
-msg = 'тестовое сообщение, не отвечайте (test message, do not reply)'
+msg = u'тестовое сообщение, не отвечайте (test message, do not reply)'
 
 COOKIES = 'mailbot/cookie.ini'
 
 def index(request):
     
     html_template = open('mailbot/templates/index.html','r')
-    
-    account_page = get_page()
-    friends = get_friends_from(account_page)
-    
-    send_msg_to(msg, friends)
+    page = get_page(URL_NEXT)
+    #test = get_url_from_page(account_page, '<a.*accesskey=[\'"]?1[\'"]?.*href=[\'"]?([^\'">]+)[\'"]?')
+    friends = get_friends_from(page)
+    #send_msg_to(friends)
     
     return HttpResponse(html_template.read().format(info=friends))
 
 def do_login():
+
+    curl(url = URL_AUTH, postdata = AUTHDATA, proxy = None, method = 'post')
     
-    curl = pycurl.Curl()
-    
-    curl.setopt(pycurl.URL, URL_AUTH)
-    curl.setopt(pycurl.FOLLOWLOCATION, 1)
-    curl.setopt(pycurl.POST, 1)
-    curl.setopt(pycurl.COOKIEJAR, COOKIES)
-    curl.setopt(pycurl.USERAGENT, USERAGENT)
-    curl.setopt(pycurl.HEADER, 1)
-    """curl.setopt(pycurl.PROXY, PROXY)
-    curl.setopt(pycurl.CONNECTTIMEOUT, 15)
-    curl.setopt(pycurl.TIMEOUT, 18)"""
-    curl.setopt(pycurl.POSTFIELDS, urllib.urlencode(AUTHDATA))
-    curl.setopt(pycurl.VERBOSE, 1)
-    
-    curl.perform()
-    curl.close()
-    
-def get_page():
+def get_page(url):
     
     do_login()
-    curl = pycurl.Curl()
-    
-    curl.setopt(pycurl.URL, URL_NEXT)
-    curl.setopt(pycurl.FOLLOWLOCATION, 1)
-    curl.setopt(pycurl.POST, 0)
-    curl.setopt(pycurl.COOKIEFILE, COOKIES)
-    curl.setopt(pycurl.SSL_VERIFYPEER, 0)
-    curl.setopt(pycurl.USERAGENT, USERAGENT)
-    """curl.setopt(pycurl.PROXY, proxy)
-    curl.setopt(pycurl.CONNECTTIMEOUT, 15)
-    curl.setopt(pycurl.TIMEOUT, 18)"""
-    curl.setopt(pycurl.VERBOSE, 1)
-    curl.setopt(pycurl.WRITEFUNCTION, data.write)
-    
-    curl.perform()
-    curl.close()
+    curl(url, postdata = None, proxy = None)
 
     return data.getvalue()
 
 def get_friends_from(html):
     
-    friends_ids = []
+    friends_ids = list()
     # find links to friends pages by special class
     links = re.findall(r'class=[\'"]?[^<>]*lfloat[^<>]+[\'"]?[^<>]* href=[\'"]?(http[^>\'"]*)[\'"]?', html)
     
@@ -110,28 +80,42 @@ def get_friends_from(html):
             
     return friends_ids
 
-def send_msg_to(msg, friends):
+def send_msg_to(friends):
+
+    friends = str(friends)[1:-1]    
+    MSG = {'body':msg, 'ids['+friends+']':friends, 'fb_dtsg':token, 'send':'Ответить'}
+    
+    curl(url = URL_SEND_MSG, postdata = MSG, proxy = None, method = 'post')
+
+def curl(url, postdata = None, proxy = None, method = None):
     
     curl = pycurl.Curl()
-
-    for friend in friends:
-        
-        MSG = {'body':msg, 'ids['+friend+']':friend, 'fb_dtsg':fb_dtsg, 'send':'Ответить'}
-        
-        curl.setopt(pycurl.URL, URL_SEND_MSG)
-        curl.setopt(pycurl.FOLLOWLOCATION, 1)
-        curl.setopt(pycurl.POST, 0)
-        curl.setopt(pycurl.COOKIEFILE, COOKIES)
-        curl.setopt(pycurl.SSL_VERIFYPEER, 0)
-        curl.setopt(pycurl.USERAGENT, USERAGENT)
-        """curl.setopt(pycurl.PROXY, proxy)
-        curl.setopt(pycurl.CONNECTTIMEOUT, 15)
-        curl.setopt(pycurl.TIMEOUT, 18)"""
-        curl.setopt(pycurl.VERBOSE, 1)
-        curl.setopt(pycurl.POSTFIELDS, urllib.urlencode(MSG))
     
-        curl.perform()
-        # making 1 second delay, cause we're not spammers
-        time.sleep(1)
-
+    curl.setopt(pycurl.URL, url)
+    curl.setopt(pycurl.FOLLOWLOCATION, 1)
+    curl.setopt(pycurl.SSL_VERIFYPEER, 0)
+    
+    if method :
+        curl.setopt(pycurl.POST, 1)
+    else :
+        curl.setopt(pycurl.POST, 0)
+        
+    curl.setopt(pycurl.COOKIEJAR, COOKIES)
+    curl.setopt(pycurl.COOKIEFILE, COOKIES)
+    curl.setopt(pycurl.USERAGENT, USERAGENT)
+    curl.setopt(pycurl.HEADER, 0)
+    curl.setopt(pycurl.VERBOSE, 0)
+    
+    if postdata :
+        curl.setopt(pycurl.POSTFIELDS, urllib.urlencode(postdata))
+    
+    if proxy :
+        curl.setopt(pycurl.PROXY, proxy)
+        curl.setopt(pycurl.CONNECTTIMEOUT, 15)
+        curl.setopt(pycurl.TIMEOUT, 18)    
+        
+    curl.setopt(pycurl.WRITEFUNCTION, data.write)
+    
+    curl.perform()
     curl.close()
+       
