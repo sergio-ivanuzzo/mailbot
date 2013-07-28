@@ -1,23 +1,25 @@
 # -*- coding: utf-8 -*-
 
 from django.http import HttpResponse
+from lxml import etree
 
-import urllib, pycurl, cStringIO, re, time, lxml.html
+import urllib, pycurl, cStringIO, re, time
 
 # for output cURL result
 data = cStringIO.StringIO()
 
 # OPTIONS
 
+URL_FB = 'https://m.facebook.com'
 URL_AUTH = 'https://m.facebook.com/login.php'
-URL_MAIN_PAGE = 'https://m.facebook.com/home.php'
-URL_NEXT = 'https://facebook.com/friends'
+URL_HOME = 'https://m.facebook.com/home.php'
+URL_FRIENDS = 'https://m.facebook.com/PLACEHOLDERv=friends&refid=17'
 URL_SEND_MSG = 'https://m.facebook.com/messages/send'
 
-EMAIL = ['obsidian.inf@gmail.com', 'sergio.ivanuzzo@gmail.com', '@gmail.com']
-PASSWORD = ['facebookPASS235', 'facebookPASS234', '']
+EMAIL = ['@gmail.com', '@gmail.com', '@gmail.com']
+PASSWORD = ['', '', '']
 
-account_number = 1
+account_number = 2
 
 AUTHDATA = {
         'email': EMAIL[account_number],
@@ -26,41 +28,70 @@ AUTHDATA = {
 
 USERAGENT = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100101 Firefox/22.0'
 
-# param, which use in private message sending
-FB_DTSG = ['AQB5FnCU', 'AQAoKq39', 'AQBqnU8M']
-token = FB_DTSG[account_number]
-
 PROXY = ['190.96.64.234:8080', '78.129.233.67:3128', '213.141.236.133:8090']
 proxy = PROXY[2]
 
-msg = u'тестовое сообщение, не отвечайте (test message, do not reply)'
+msg = 'test message, do not reply'
 
 COOKIES = 'mailbot/cookie.ini'
 
 def index(request):
     
     html_template = open('mailbot/templates/index.html','r')
-    page = get_page(URL_NEXT)
-    #test = get_url_from_page(account_page, '<a.*accesskey=[\'"]?1[\'"]?.*href=[\'"]?([^\'">]+)[\'"]?')
-    friends = get_friends_from(page)
-    #send_msg_to(friends)
     
-    return HttpResponse(html_template.read().format(info=friends))
+    account_page = get_page(URL_HOME)
+    # token for sending messages
+    token = get_token_from(account_page)
+    
+    profile_page = get_url_from(account_page, xpath="//*[@id='viewport']/div[1]span/div[1]/span[2]/a")
+    page_alias = get_page_alias(profile_page)
+    
+    url_friends = re.sub('PLACEHOLDER',page_alias,URL_FRIENDS)
+    #friends_page = get_page(url_friends)
+    #friends = get_friends_from(account_page)
+    #send_msg_to(friends)
+    return HttpResponse(html_template.read().format(info=url_friends))#friends))
 
-def do_login():
+def do_login(url):
 
-    curl(url = URL_AUTH, postdata = AUTHDATA, proxy = None, method = 'post')
+    curl(url=URL_AUTH, postdata=AUTHDATA, proxy=None, method='post', write_cookies=COOKIES)
     
 def get_page(url):
     
-    do_login()
-    curl(url, postdata = None, proxy = None)
+    do_login(URL_AUTH)
+    page = curl(url, postdata=None, proxy=None, method=None, write_cookies=None, read_cookies=COOKIES)
+    return page
 
-    return data.getvalue()
+def get_token_from(html):
+    
+    parser = etree.HTMLParser()
+    tree = etree.parse(cStringIO.StringIO(html), parser)
+    token = tree.find("//*[@id='composer_form']/input[1]").attrib['value']
+    
+    return token
+
+def get_page_alias(url):
+    # result will be like "/profile.php?id=000000&" or like "/nickname?"
+    # result will be replace with PLACEHOLDER (see URL_FRIENDS) 
+    if re.search(r'profile.php[?]{1}id=', url):
+        alias = re.search('\/([^&]*[?&]?)', url)
+        alias = alias.group(1)
+    else :
+        alias = re.search('\/([^?&]*[?&]?)', url)
+        alias = alias.group(1)
+        
+    return alias
+def get_url_from(html, xpath):
+    
+    parser = parser = etree.HTMLParser()
+    tree = etree.parse(cStringIO.StringIO(html), parser)
+    url = tree.find(xpath).attrib['href']
+    
+    return url
 
 def get_friends_from(html):
     
-    friends_ids = list()
+    friends_ids = []
     # find links to friends pages by special class
     links = re.findall(r'class=[\'"]?[^<>]*lfloat[^<>]+[\'"]?[^<>]* href=[\'"]?(http[^>\'"]*)[\'"]?', html)
     
@@ -84,13 +115,15 @@ def send_msg_to(friends):
 
     friends = str(friends)[1:-1]    
     MSG = {'body':msg, 'ids['+friends+']':friends, 'fb_dtsg':token, 'send':'Ответить'}
+    curl(url=URL_SEND_MSG, postdata=MSG, proxy=None, method='post', write_cookies=None, read_cookies=COOKIES)
     
-    curl(url = URL_SEND_MSG, postdata = MSG, proxy = None, method = 'post')
-
-def curl(url, postdata = None, proxy = None, method = None):
+def curl(url, postdata=None, proxy=None, method=None, write_cookies=None, read_cookies=None):
     
     curl = pycurl.Curl()
     
+    # for output cURL result
+    data = cStringIO.StringIO()
+
     curl.setopt(pycurl.URL, url)
     curl.setopt(pycurl.FOLLOWLOCATION, 1)
     curl.setopt(pycurl.SSL_VERIFYPEER, 0)
@@ -99,12 +132,15 @@ def curl(url, postdata = None, proxy = None, method = None):
         curl.setopt(pycurl.POST, 1)
     else :
         curl.setopt(pycurl.POST, 0)
+    
+    if write_cookies :
+        curl.setopt(pycurl.COOKIEJAR, write_cookies)
+    if read_cookies :
+        curl.setopt(pycurl.COOKIEFILE, read_cookies)
         
-    curl.setopt(pycurl.COOKIEJAR, COOKIES)
-    curl.setopt(pycurl.COOKIEFILE, COOKIES)
     curl.setopt(pycurl.USERAGENT, USERAGENT)
-    curl.setopt(pycurl.HEADER, 0)
-    curl.setopt(pycurl.VERBOSE, 0)
+    curl.setopt(pycurl.HEADER, 1)
+    curl.setopt(pycurl.VERBOSE, 1)
     
     if postdata :
         curl.setopt(pycurl.POSTFIELDS, urllib.urlencode(postdata))
@@ -118,4 +154,5 @@ def curl(url, postdata = None, proxy = None, method = None):
     
     curl.perform()
     curl.close()
-       
+    
+    return data.getvalue()
