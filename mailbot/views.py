@@ -14,24 +14,24 @@ URL_FB = 'https://m.facebook.com'
 URL_AUTH = 'https://m.facebook.com/login.php'
 URL_HOME = 'https://m.facebook.com/home.php'
 URL_FRIENDS = 'https://m.facebook.com/PLACEHOLDERv=friends&refid=17'
-URL_SEND_MSG = 'https://m.facebook.com/messages/send/?icm=1&refid=12'
+URL_SEND_MSG = 'https://m.facebook.com/messages/send/'
 
 EMAIL = ['@gmail.com', '@gmail.com', '@gmail.com']
 PASSWORD = ['', '', '']
 
-account_number = 1
+account_number = 2
 
 AUTHDATA = {
         'email': EMAIL[account_number],
         'pass':PASSWORD[account_number],
         }
 
-USERAGENT = 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:22.0) Gecko/20100101 Firefox/22.0'
+USERAGENT = 'Opera/12.02 (Android 4.1; Linux; Opera Mobi/ADR-1111101157; U; en-US) Presto/2.9.201 Version/12.02'
 
 PROXY = ['190.96.64.234:8080', '78.129.233.67:3128', '213.141.236.133:8090']
 proxy = PROXY[2]
 
-msg = 'z55fgfh'
+msg = 'посоветуй, пожалуста, фильм интересный. желательно из жанра фэнтези/фантастика. спасибо заранее!'
 
 COOKIES = 'mailbot/cookie.ini'
 
@@ -56,7 +56,7 @@ def index(request):
     
     send_msg_to_friends(options)
 
-    return HttpResponse(html_template.read().format(info='DONE'))#friends))
+    return HttpResponse(html_template.read().format(info='OK'))#friends))
 
 def do_login(url):
 
@@ -122,11 +122,12 @@ def send_msg_to_friends(options):
             friends.append(friend_id.group(1))
     
     # friends type is list, so after making string from it we must delete "[" and "]"
-    friends = str(friends)[1:-1]  
-
-    MSG = {'body':msg, 'ids['+friends+']':friends, 'fb_dtsg':token, 'send':'Ответить'}
-    curl(url=URL_SEND_MSG, postdata=MSG, proxy=None, method='post', write_cookies=None, read_cookies=COOKIES)
-    
+    #friends = str(friends)[1:-1]
+    for friend in friends :  
+        MSG = {'body':msg, 'ids['+friend+']':friend, 'fb_dtsg':token, 'send':'Ответить'}
+        curl(url=URL_SEND_MSG, postdata=MSG, proxy=None, method='post', write_cookies=None, read_cookies=COOKIES)
+    #return MSG
+    #time.sleep(2)
     more_friends = tree.xpath("//*[@id='m_more_friends']/a")
     
     if more_friends :
