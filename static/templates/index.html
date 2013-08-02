@@ -1,0 +1,175 @@
+<html>
+	<head>
+		<title>Flood Sender 1.0</title>
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+		<style>
+			#menu {
+	    		border: 1px solid gray;
+			    width: 1200px;
+			    margin: 4px auto;
+			    height: 60px;
+			    padding: 2px 10px;
+			}
+			#container {
+				width: 90%;
+				margin: 10px auto;
+			}
+				
+			#container div{
+				float: left;
+				margin: 7px 14px;
+				font-weight: bold;
+				color: black;
+			}
+			#container div:hover {
+				color: blue;
+				cursor: pointer;
+			}
+			#main {
+				margin: 2px auto;
+				width: 1220px;
+			}
+			#main_left div:not(#main_tasks) {
+				display: none;
+			}
+			#main_left {
+				background: #ececec;
+				float: left;
+				border: 1px solid gray;
+				width: 980px;
+				height: 400px;
+				padding: 10px;
+			}
+			#main_right {
+				float: right;
+				border: 1px solid gray;
+				width: 200px;
+				height: 400px;
+			}
+			table  {
+				border-collapse: collapse;
+				width: 800px;
+			}
+			table td, th {
+				border: 1px solid gray;
+			}
+			.clear { clear: both }
+		</style>
+	</head>
+	<body>
+		<div id="menu">
+			<div id="container">
+				<div id="_tasks">Tasks</div>
+				<div id="_accounts">Accounts</div>
+				<div id="_options">Options</div>
+			</div>
+			<div class="clear"></div>
+		</div>
+		<div id="main">
+			<div id="main_left">
+				<div id="main_tasks">
+					Задания
+				</div>
+				<div id="main_accounts">
+					<form method="post" action="/add_account/">
+						{% csrf_token %}
+						<input type="text" name="acc_email" placeholder="Email">
+						<input type="text" name="acc_pass" placeholder="Password">
+						<input type="submit" value="Add account"></br>
+					</form>
+					<form method="post" action="/add_account_group/">
+						{% csrf_token %}
+						<input type="text" name="acc_group_name" placeholder="Group name">
+						<input type="submit" value="Add account group"></br>
+					</form>
+					<table id="accounts">
+						<tr>
+							<th>ID</th>
+							<th>Email</th>
+							<th>Password</th>
+							<th>Action</th>
+						</tr>
+					</table>
+				</div>
+				<div id="main_options">
+					<fieldset>
+						<legend>Messages set</legend>
+						<form method="post" action="/add_message/">
+							{% csrf_token %}
+							<input type="text" name="title" id="title" placeholder="Message title"><br/>
+							<textarea cols=60 rows=4 name="body" id="body" placeholder="Your message"></textarea></br>
+							<input type="submit" id="add_msg" value="Add message"></br>
+						</form>
+						<table id="messages">
+							<tr>
+								<th>ID</th>
+								<th>Title</th>
+								<th>Body</th>
+								<th>Date</th>
+								<th>Action</th>
+							</tr>
+						</table>
+					</fieldset>
+				</div>
+			</div>
+			<div id="main_right">
+				<div id="main_right_statistics"></div>
+			</div>
+			<div class="clear"></div>
+		</div>
+	</body>
+</html>
+
+<script>
+	$(document).ready(function() {
+		$("#container div").click(function() {
+			postfix = $(this).attr("id");
+			make_visible = "#main" + postfix;
+			$("#main_left div").css("display", "none");
+			$(make_visible).css("display", "block");
+			
+			/*$.ajax({
+				url: "/send/",
+				success: function(e) {alert(e)}
+			})*/
+			if (postfix == "_options") {
+				$.ajax({
+					url: "/show_messages/",
+					success: function(e) {
+						$("#messages").html("");
+						var json = JSON.parse(e);
+						var msg_list = "";
+						
+						for(msg in json['all']) 
+							msg_list += "<tr><td>ID</td><td>"+json['all'][msg]['title']+"</td><td>"+
+							json['all'][msg]['body']+"</td><td>"+json['all'][msg]['date']+"</td><td>ACTION</td></tr>";
+						
+						html = $("#messages").html();
+							
+						$("#messages").html(html + msg_list);
+					}
+				});
+			}
+			
+			else if (postfix == "_accounts") {
+				$.ajax({
+					url: "/show_accounts/",
+					success: function(e) {
+						$("#accounts").html("");
+						var json = JSON.parse(e);
+						var acc_list = "";
+						
+						for(acc in json['all']) 
+							acc_list += "<tr><td>"+acc+"</td><td>"+json['all'][acc]['email']+"</td><td>"+
+							json['all'][acc]['pass']+"</td><td>ACTION</td></tr>";
+						
+						html = $("#accounts").html();
+							
+						$("#accounts").html(html + acc_list);
+					}
+				});
+			}
+		});
+
+	});
+</script>
