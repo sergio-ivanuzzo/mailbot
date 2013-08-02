@@ -68,7 +68,16 @@
 		<div id="main">
 			<div id="main_left">
 				<div id="main_tasks">
-					Задания
+					<form method="post" action="/send_msg_to_group/" class="send_to_group">
+						{% csrf_token %}
+						<table id="tasks">
+							<tr>
+								<td><select class="groups" name="group"></select></td>
+								<td><select class="messages" name="message"></select></td>
+								<td><input type="submit" value="Send message to group"></td>
+							</tr>
+						</table>
+					</form>
 				</div>
 				<div id="main_accounts">
 					<form method="post" action="/add_account/">
@@ -87,7 +96,8 @@
 							<th>ID</th>
 							<th>Email</th>
 							<th>Password</th>
-							<th>Action</th>
+							<th>Groups</th>
+							<th>Delete</th>
 						</tr>
 					</table>
 				</div>
@@ -134,7 +144,7 @@
 			})*/
 			if (postfix == "_options") {
 				$.ajax({
-					url: "/show_messages/",
+					url: "/get_messages/",
 					success: function(e) {
 						$("#messages").html("");
 						var json = JSON.parse(e);
@@ -152,23 +162,101 @@
 			}
 			
 			else if (postfix == "_accounts") {
+				// getting groups list
 				$.ajax({
-					url: "/show_accounts/",
+					url: "/get_groups/",
+					success: function(e) {
+						var json = JSON.parse(e);
+						if (typeof json !== "undefined") {
+							groups_list = "<option>Select group...</option>";
+							for(group in json) {
+								groups_list += "<option value='"+json[group]+"'>"+json[group]+"</option>";
+							}		
+							groups_list = "<form method='post' class='add_to' action='/add_account_to_group/'>"+
+											"{% csrf_token %}<input type='hidden' name='id'>"+
+											"<input type='hidden' name='group'>"+
+											"<select class='groups'>" + groups_list + "</select></form>";
+											
+											// getting accounts list
+				$.ajax({
+					url: "/get_accounts/",
 					success: function(e) {
 						$("#accounts").html("");
 						var json = JSON.parse(e);
 						var acc_list = "";
 						
-						for(acc in json['all']) 
+						for(acc in json['all']) {
+							if (typeof json['all'][acc]['group'] == 'undefined') 
+								group = groups_list;
+							else
+								group = json['all'][acc]['group'];
 							acc_list += "<tr><td>"+acc+"</td><td>"+json['all'][acc]['email']+"</td><td>"+
-							json['all'][acc]['pass']+"</td><td>ACTION</td></tr>";
+							json['all'][acc]['pass']+"</td><td>"+group+"</td>"+
+							"<td><form method='post' action='/delete_account/' class='del'>"+
+							"{% csrf_token %}<input type='hidden' name='id'>"+
+							"<input type='button' value='Delete this account' class='acc_del'>"+
+							"</form></td></tr>";
+							}
 						
 						html = $("#accounts").html();
 							
 						$("#accounts").html(html + acc_list);
 					}
 				});
+						}		
+						
+						
+								
+					}
+				});
 			}
+			
+			else if (postfix == "_tasks") {
+
+				// getting groups list
+				$.ajax({
+					url: "/get_groups/",
+					success: function(e) {
+						var json = JSON.parse(e);
+						if (typeof json !== "undefined") {
+							groups_list = "<option>Select group...</option>";
+							for(group in json) {
+								groups_list += "<option value='"+json[group]+"'>"+json[group]+"</option>";
+							}		
+							$("select[class='groups']").html(groups_list);
+						}	
+					}
+				});
+				// getting messages list
+				$.ajax({
+					url: "/get_messages/",
+					success: function(e) {
+						var json = JSON.parse(e);
+						if (typeof json !== "undefined") {
+							msg_list = "<option>Select message...</option>";
+							for(msg in json['all']) {
+								msg_list += "<option value='"+json['all'][msg]['title']+"'>"+
+								json['all'][msg]['title']+"</option>";
+							}		
+							$("select[class='messages']").html(msg_list);
+						}
+					}
+				});	
+				
+			}			
+		});
+		$("#accounts").on("change", ".groups", function() {
+			var id = $(this).parents("tr").find("td").eq(0).html();
+			var group = $(this).val();
+			$(".add_to").find("[name='id']").attr("value", id);
+			$(".add_to").find("[name='group']").attr("value", group);
+			$(".add_to").submit();
+		});
+		
+		$("#accounts").on("click", ".acc_del", function() {
+			var id = $(this).parents("tr").find("td").eq(0).html();
+			$(".del").find("[name='id']").attr("value", id);
+			$('.del').submit();
 		});
 
 	});

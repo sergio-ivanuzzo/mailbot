@@ -4,7 +4,7 @@ from django.http import HttpResponse
 from lxml import etree
 from multiprocessing import Process, Queue
 
-import urllib, pycurl, cStringIO, re, time
+import urllib, pycurl, cStringIO, re, time, pickle
 
 # for output cURL result
 data = cStringIO.StringIO()
@@ -22,10 +22,9 @@ USERAGENT = 'Opera/12.02 (Android 4.1; Linux; Opera Mobi/ADR-1111101157; U; en-U
 PROXY = ['190.96.64.234:8080', '78.129.233.67:3128', '213.141.236.133:8090']
 proxy = PROXY[2]
 
-COOKIES = 'mailbot/cookie.ini'
+COOKIES = 'cookie.ini'
 
-msg = "Всем большое спасибо за участие в тесте. Еще раз сори за спам)"
-
+#counter = 0
 '''def index(request):
     queue = Queue()
     
@@ -41,9 +40,7 @@ msg = "Всем большое спасибо за участие в тесте.
 
     return HttpResponse()'''
 
-def do_send(email, password):
-    
-    html_template = open('mailbot/templates/index.html','r')
+def do_send(email, password, message):
     
     authdata = {'email':email, 'pass':password}
     do_login(URL_AUTH, authdata)
@@ -61,13 +58,12 @@ def do_send(email, password):
     
             url_friends = re.sub('PLACEHOLDER',page_alias,URL_FRIENDS)
             friends_page = get_page(url_friends)
+            #friends_count = get_friends_count(friends_page)
     
-            options = {'html':friends_page, 'token': token}
-    
-            send_msg_to_friends(options)
-            
-            print 'DONE'
+            #all_friends = get_all_friends_from(friends_page)
+            send_msg_to_friends(friends_page, token, message)
 
+    #html_template = open('mailbot/templates/index.html','r')
     #return HttpResponse(html_template.read().format(info=profile_page))#friends))
 
 def do_login(url, authdata):
@@ -84,8 +80,18 @@ def get_token_from(html):
     parser = etree.HTMLParser()
     tree = etree.parse(cStringIO.StringIO(html), parser)
     token = tree.xpath("//*[@id='composer_form']/input[@name='fb_dtsg']")
-    if len(token) :
+    if token :
         return token[0].attrib['value']
+    else :
+        return False
+    
+def get_friends_count(html):
+    
+    parser = etree.HTMLParser()
+    tree = etree.parse(cStringIO.StringIO(html), parser)
+    friends_count = tree.xpath('//*[@class="_i3g"]/div[1]/h4')
+    if friends_count :
+        return friends_count[0].text
     else :
         return False
 
@@ -111,13 +117,9 @@ def get_url_from(html, xpath):
     else :
         return False
 
-def send_msg_to_friends(options):
+def send_msg_to_friends(html, token, message):
     
-    html = options['html'] # friends page
-    token = options['token'] # use for sending messages
-
     friends = []
-    
     parser = parser = etree.HTMLParser()
     tree = etree.parse(cStringIO.StringIO(html), parser)
     
@@ -136,22 +138,35 @@ def send_msg_to_friends(options):
             
             friend_id = re.search(r'id[":\s"]+([^"]+)', get_id)
             friends.append(friend_id.group(1))
-    
-    # friends type is list, so after making string from it we must delete "[" and "]"
-    #friends = str(friends)[1:-1]
-    for friend in friends :  
-        data = {'body':msg, 'ids['+friend+']':friend, 'fb_dtsg':token, 'send':'Ответить'}
-        curl(url=URL_SEND_MSG, postdata=data, proxy=None, method='post', write_cookies=None, read_cookies=COOKIES)
-    #return MSG
-    #time.sleep(2)
+            
+    send_msg(friends, token, message)
+
     more_friends = tree.xpath("//*[@id='m_more_friends']/a")
     
     if more_friends :
         friends_page = get_page(URL_FB+more_friends[0].attrib['href'])
-        options = {'html':friends_page, 'token': token}
-        send_msg_to_friends(options)
+        send_msg_to_friends(friends_page, token, message)
     else :
-        return True
+        return friends
+    
+def send_msg(friends, token, message):
+    
+    file = open("static/text/messages.pkl", "rb")
+    messages = pickle.load(file)
+    file.close()
+    
+    for m in messages['all'] :
+        if m['title'] == message:
+            msg = m['body']   
+             
+    for friend in friends :
+        data = {'body':msg, 'ids['+friend+']':friend, 'fb_dtsg':token, 'send':'Ответить'}
+        curl(url=URL_SEND_MSG, postdata=data, proxy=None, method='post', write_cookies=None, read_cookies=COOKIES)
+    
+    '''progress = friends_count - counter
+    counter = counter + 1
+    
+    return progress'''
 
     
 def curl(url, postdata=None, proxy=None, method=None, write_cookies=None, read_cookies=None):

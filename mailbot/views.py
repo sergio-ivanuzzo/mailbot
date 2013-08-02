@@ -12,26 +12,47 @@ from datetime import datetime
 import pickle
 
 def index(request):
+
     c = {}
     c.update(csrf(request))
     
     #html_template = open('static/templates/index.html','r')
     return render_to_response("index.html",c)
 
-'''def send(request):
+def send_msg_to_group(request):
     
+    accounts = open("static/text/accounts.pkl", "rb")
+    index = pickle.load(accounts)
+    accounts.close()
+    
+    result = []
+    group = request.REQUEST['group']
+    message = request.REQUEST['message']
+    
+    for acc in index['all'] :
+        if index['all'][acc]['group'] == group :
+            email = index['all'][acc]['email']
+            password = index['all'][acc]['pass']
+            result.append({"email":email, "pass":password})
+    
+    send(result, message)
+
+    return HttpResponseRedirect("/index/")
+
+def send(accounts, message):
+
     queue = Queue()
-    
-    for data in ACCOUNTS :
-        email = data
-        password = ACCOUNTS[data]
-        queue.put(do_send(email, password))
+
+    for data in accounts :
+        email = data['email']
+        password = data['pass']
+        queue.put(do_send(email, password, message))
         
-    for i in enumerate(ACCOUNTS) :
+    for i in enumerate(accounts) :
         task = Process(target=queue.get())
         task.start()
         
-    return HttpResponse("OK!")'''
+    return(len(accounts))
 
 def add_message(request):
     
@@ -73,7 +94,7 @@ def add_message(request):
     
     return HttpResponseRedirect("/index/")
 
-def show_messages(request):
+def get_messages(request):
     
     file = open("static/text/messages.pkl", "rb")
     messages = pickle.load(file)
@@ -81,6 +102,23 @@ def show_messages(request):
     file.close()
     
     return HttpResponse(simplejson.dumps(messages))
+
+def get_accounts(request):
+    
+    file = open("static/text/accounts.pkl", "rb")
+    accounts = pickle.load(file)
+    
+    file.close()
+    
+    return HttpResponse(simplejson.dumps(accounts))
+
+def get_groups(request):
+    
+    file = open("static/text/groups.pkl", "rb")
+    groups = pickle.load(file)
+    file.close()    
+    
+    return HttpResponse(simplejson.dumps(groups))
 
 def add_account(request):
     
@@ -123,23 +161,73 @@ def add_account(request):
     
     return HttpResponseRedirect("/index/")
 
-def show_accounts(request):
-    
-    file = open("static/text/accounts.pkl", "rb")
-    accounts = pickle.load(file)
-    
-    file.close()
-    
-    return HttpResponse(simplejson.dumps(accounts))
-
 def add_account_group(request):
     
     try :
-        groups = open("static/text/groups.pkl", "rb")
+        file = open("static/text/groups.pkl", "rb")
+        groups = pickle.load(file)
+        file.close()
+        
+        file = open("static/text/groups.pkl", "wb")
+        
+        group = str(request.REQUEST['acc_group_name'])
+        groups.append(group)
+        pickle.dump(groups, file)
+        
+        file.close()
+        
     except IOError:
-        groups = open("static/text/groups.pkl", "wb")
-        group = request.REQUST['name']
-        pickle.dump(group, groups)
-        groups.close()
+        file = open("static/text/groups.pkl", "wb")
+        
+        groups = []
+        group = str(request.REQUEST['acc_group_name'])
+        groups.append(group)
+        pickle.dump(groups, file)
+        
+        file.close()
     
     return HttpResponseRedirect("/index/")
+
+def add_account_to_group(request):
+    
+    accounts = open("static/text/accounts.pkl", "rb")
+    index = pickle.load(accounts)
+    accounts.close()
+    
+    accounts = open("static/text/accounts.pkl", "wb")
+    
+    id = int(request.REQUEST['id'])
+    group = str(request.REQUEST['group'])
+    
+    index['all'][id]['group'] = group
+    
+    pickle.dump(index, accounts)    
+    accounts.close()  
+    
+    return HttpResponseRedirect("/index/")
+
+def delete_account(request):
+    
+    accounts = open("static/text/accounts.pkl", "rb")
+    index = pickle.load(accounts)
+    accounts.close()
+    
+    id = int(request.REQUEST['id'])
+    
+    del index['all'][id]
+    
+    new_index = {'all':{}}
+    counter = 1
+    for i in xrange(len(index['all'])) :
+        count = i + 1 
+        new_index['all'][count] = ""
+    
+    for _id in index['all'] :
+        new_index['all'][counter] = index['all'][_id]
+        counter = counter + 1
+    
+    accounts = open("static/text/accounts.pkl", "wb")
+    pickle.dump(new_index, accounts)    
+    accounts.close() 
+    
+    return HttpResponseRedirect("/index/")  
