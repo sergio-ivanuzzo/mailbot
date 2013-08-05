@@ -5,11 +5,13 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.core.context_processors import csrf
 from django.shortcuts import render_to_response
 from django.utils import simplejson
-from multiprocessing import Process, Queue
+from multiprocessing import Pool, cpu_count
 from sendMessages import do_send
 from datetime import datetime
 
-import pickle
+import pickle, time
+
+proxies = ['190.96.64.234:8080', '115.133.245.116:8080', '37.46.197.58:7808']
 
 def index(request):
 
@@ -24,36 +26,30 @@ def send_msg_to_group(request):
     accounts = open("static/text/accounts.pkl", "rb")
     index = pickle.load(accounts)
     accounts.close()
-    
-    result = []
+
     group = request.REQUEST['group']
     message = request.REQUEST['message']
-    
-    for acc in index['all'] :
-        if index['all'][acc]['group'] == group :
-            email = index['all'][acc]['email']
-            password = index['all'][acc]['pass']
-            result.append({"email":email, "pass":password})
-    
-    send(result, message)
 
+    accounts = [{"email":index['all'][acc]['email'], "pass":index['all'][acc]['pass']} for acc in index['all'] if index['all'][acc]['group'] == group]        
+    send(accounts, message)
+    
     return HttpResponseRedirect("/index/")
 
 def send(accounts, message):
-
-    queue = Queue()
+    
+    num = 0
+    pool = Pool(processes=cpu_count()*2)
 
     for data in accounts :
-        email = data['email']
-        password = data['pass']
-        queue.put(do_send(email, password, message))
         
-    for i in enumerate(accounts) :
-        task = Process(target=queue.get())
-        task.start()
+        email, password = data['email'], data['pass']
+        proxy, num = proxies[num], num + 1
+        cookie = "cookies/" + str(data['email']) + "_cookie"
         
-    return(len(accounts))
-
+        pool.imap(do_send, [(email, password, message, proxy, cookie)])
+        
+    pool.close()
+    
 def add_message(request):
     
     _date = datetime.today()

@@ -19,60 +19,42 @@ URL_SEND_MSG = 'https://m.facebook.com/messages/send/'
 
 USERAGENT = 'Opera/12.02 (Android 4.1; Linux; Opera Mobi/ADR-1111101157; U; en-US) Presto/2.9.201 Version/12.02'
 
-PROXY = ['190.96.64.234:8080', '78.129.233.67:3128', '213.141.236.133:8090']
-proxy = PROXY[2]
-
-COOKIES = 'cookie.ini'
-
-#counter = 0
-'''def index(request):
-    queue = Queue()
+def do_send(data):
     
-    for data in ACCOUNTS :
-        
-        email = data
-        password = ACCOUNTS[data]
-        
-        task = Process(target=send_queue, args=(queue, email, password))
-        task.start()
-        
-        queue.get()
+    email, password, message, proxy, cookies = data
+    proxy = None
+    do_login(URL_AUTH, email, password, cookies)
+    account_page = get_page(URL_HOME, proxy, cookies)
 
-    return HttpResponse()'''
-
-def do_send(email, password, message):
-    
-    authdata = {'email':email, 'pass':password}
-    do_login(URL_AUTH, authdata)
-    
-    account_page = get_page(URL_HOME)
     # token for sending messages
     token = get_token_from(account_page)
-    
+
     if token :
         profile_page = get_url_from(account_page, xpath="//div[@id='viewport']/div[1]/span/div[1]/span[2]/a")
         
         if profile_page :
             # "/profile.php?id=xxxxxxxxxx&" or /xxxxxxxxx?
             page_alias = get_page_alias(profile_page)
-    
+            # replace PLACEHOLDER with url to friends page
             url_friends = re.sub('PLACEHOLDER',page_alias,URL_FRIENDS)
-            friends_page = get_page(url_friends)
+            
+            friends_page = get_page(url_friends, proxy, cookies)
             #friends_count = get_friends_count(friends_page)
-    
-            #all_friends = get_all_friends_from(friends_page)
-            send_msg_to_friends(friends_page, token, message)
+            
+            all_friends = get_all_friends_from(friends_page, proxy, cookies)
+            send_msg(all_friends, token, message, proxy, cookies)
 
     #html_template = open('mailbot/templates/index.html','r')
     #return HttpResponse(html_template.read().format(info=profile_page))#friends))
 
-def do_login(url, authdata):
-
-    curl(url=URL_AUTH, postdata=authdata, proxy=None, method='post', write_cookies=COOKIES)
+def do_login(url, email, password, cookies):
     
-def get_page(url):
+    authdata = {'email':email, 'pass':password}
+    curl(url=url, postdata=authdata, proxy=None, method='post', write_cookies=cookies)
     
-    page = curl(url, postdata=None, proxy=None, method=None, write_cookies=None, read_cookies=COOKIES)
+def get_page(url, proxy, cookies):
+    
+    page = curl(url, postdata=None, proxy=proxy, method=None, write_cookies=None, read_cookies=cookies)
     return page
 
 def get_token_from(html):
@@ -117,39 +99,48 @@ def get_url_from(html, xpath):
     else :
         return False
 
-def send_msg_to_friends(html, token, message):
+def get_all_friends_from(html, proxy, cookies):
     
-    friends = []
-    parser = parser = etree.HTMLParser()
-    tree = etree.parse(cStringIO.StringIO(html), parser)
-    
-    links = tree.xpath("//*[@href and contains(@href, 'fref')]")
+    def get_friends(html, friends):
+        parser = parser = etree.HTMLParser()
+        tree = etree.parse(cStringIO.StringIO(html), parser)
         
-    for link in links:
-
-        # if address have "id" param 
-        if re.search(r'profile.php[?]{1}id=', link.attrib['href']):
-            friend_id = re.search(r'id=([^?&]+)', link.attrib['href'])
-            friends.append(friend_id.group(1))
-        else :
-            # if there are alias instead of id, visiting graph.facebook.com for getting id
-            id_from = urllib.urlopen('https://graph.facebook.com'+link.attrib['href'])
-            get_id = id_from.read()
-            
-            friend_id = re.search(r'id[":\s"]+([^"]+)', get_id)
-            friends.append(friend_id.group(1))
-            
-    send_msg(friends, token, message)
-
-    more_friends = tree.xpath("//*[@id='m_more_friends']/a")
-    
-    if more_friends :
-        friends_page = get_page(URL_FB+more_friends[0].attrib['href'])
-        send_msg_to_friends(friends_page, token, message)
-    else :
+        links = tree.xpath("//*[@href and contains(@href, 'fref')]")
+        for link in links:
+            # if address have "id" param 
+            if re.search(r'profile.php[?]{1}id=', link.attrib['href']):
+                friend_id = re.search(r'id=([^?&]+)', link.attrib['href'])
+                friends.append(friend_id.group(1))
+            else :
+                # if there are alias instead of id, visiting graph.facebook.com for getting id
+                id_from = urllib.urlopen('https://graph.facebook.com'+link.attrib['href'])
+                get_id = id_from.read()
+                
+                friend_id = re.search(r'id[":\s"]+([^"]+)', get_id)
+                friends.append(friend_id.group(1))
+                
         return friends
     
-def send_msg(friends, token, message):
+    # This method return link to next friends page, if it exists
+    def get_more_friends(html):
+        parser = parser = etree.HTMLParser()
+        tree = etree.parse(cStringIO.StringIO(html), parser)
+        more_friends = tree.xpath("//*[@id='m_more_friends']/a")
+        
+        return more_friends
+    
+    all_friends = []
+    friends = get_friends(html, all_friends)
+    more_friends = get_more_friends(html)
+    
+    while more_friends :
+        friends_page = get_page(URL_FB+more_friends[0].attrib['href'], proxy, cookies)
+        friends = get_friends(friends_page, all_friends)
+        more_friends = get_more_friends(friends_page)
+
+    return friends
+    
+def send_msg(friends, token, message, proxy, cookies):
     
     file = open("static/text/messages.pkl", "rb")
     messages = pickle.load(file)
@@ -157,17 +148,13 @@ def send_msg(friends, token, message):
     
     for m in messages['all'] :
         if m['title'] == message:
-            msg = m['body']   
-             
+            msg = m['body'].decode('utf-8')   
+            
+    data = {'body':msg, 'fb_dtsg':token, 'send':'Ответить'}         
     for friend in friends :
-        data = {'body':msg, 'ids['+friend+']':friend, 'fb_dtsg':token, 'send':'Ответить'}
-        curl(url=URL_SEND_MSG, postdata=data, proxy=None, method='post', write_cookies=None, read_cookies=COOKIES)
-    
-    '''progress = friends_count - counter
-    counter = counter + 1
-    
-    return progress'''
-
+        data['ids['+friend+']'] = friend
+        
+    curl(url=URL_SEND_MSG, postdata=data, proxy=proxy, method='post', write_cookies=None, read_cookies=cookies)
     
 def curl(url, postdata=None, proxy=None, method=None, write_cookies=None, read_cookies=None):
     
@@ -179,7 +166,8 @@ def curl(url, postdata=None, proxy=None, method=None, write_cookies=None, read_c
     curl.setopt(pycurl.URL, url)
     curl.setopt(pycurl.FOLLOWLOCATION, 1)
     curl.setopt(pycurl.SSL_VERIFYPEER, 0)
-    
+    curl.setopt(pycurl.SSL_VERIFYHOST, 0)
+        
     if method :
         curl.setopt(pycurl.POST, 1)
     else :
@@ -199,10 +187,16 @@ def curl(url, postdata=None, proxy=None, method=None, write_cookies=None, read_c
         curl.setopt(pycurl.POSTFIELDS, urllib.urlencode(postdata))
     
     if proxy :
-        curl.setopt(pycurl.PROXY, proxy)
-        curl.setopt(pycurl.CONNECTTIMEOUT, 15)
-        curl.setopt(pycurl.TIMEOUT, 18)    
+        proxy_addr = proxy[:proxy.find(":")]
+        proxy_port = int(proxy[proxy.find(":")+1:])
         
+        #print proxy_addr, proxy_port
+        
+        curl.setopt(pycurl.PROXY, proxy_addr)
+        curl.setopt(pycurl.PROXYPORT, proxy_port)
+        curl.setopt(pycurl.HTTPPROXYTUNNEL, 1)
+            
+    curl.setopt(pycurl.TIMEOUT, 18)
     curl.setopt(pycurl.WRITEFUNCTION, data.write)
     
     curl.perform()

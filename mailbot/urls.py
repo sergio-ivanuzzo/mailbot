@@ -16,7 +16,6 @@ urlpatterns = patterns('',
     # Uncomment the next line to enable the admin:
     # url(r'^admin/', include(admin.site.urls)),
     url(r'^index/', mailbot.views.index),
-    url(r'^send/', mailbot.views.send),
     url(r'^add_message/', mailbot.views.add_message),
     url(r'^add_account/', mailbot.views.add_account),
     url(r'^get_messages/', mailbot.views.get_messages),
